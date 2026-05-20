@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-void text-slate-100 antialiased;
+  text-rendering: geometricPrecision;
+  background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139, 92, 246, 0.08), transparent);
+}
+
+::selection {
+  @apply bg-violet-500/40 text-white;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  @apply outline outline-2 outline-offset-2 outline-violet-500/50;
+}
+
+@layer components {
+  .input-field {
+    @apply w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm text-slate-100 placeholder:text-slate-600 transition duration-200;
+    @apply focus:border-violet-500/40 focus:bg-white/[0.06] focus:ring-2 focus:ring-violet-500/20;
+  }
+
+  .btn-primary {
+    @apply rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 px-6 py-4 text-base font-semibold text-white shadow-glow;
+    @apply transition duration-300 hover:brightness-110 hover:shadow-lg active:scale-[0.99];
+  }
+}
+
+/* KaTeX in dark theme */
+.katex {
+  color: #e2e8f0;
+  font-size: 1.05em;
+}
