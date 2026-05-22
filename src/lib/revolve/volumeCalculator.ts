@@ -1,4 +1,10 @@
 import type { RevolveInput, VolumeResult } from "@/types/revolve";
+import {
+  resolveRevolutionAxis,
+  validateRevolutionAxisInput,
+  type HorizontalAxis,
+  type VerticalAxis,
+} from "./axisParser";
 import { generateAIExplanation } from "./aiExplanation";
 import { integrateSimpson, formatNumber } from "./integration";
 import { parseFunction, formatExprForDisplay } from "./mathParser";
@@ -6,17 +12,8 @@ import { washerRadiiHorizontal, washerRadiiXAxis } from "./radii";
 import { buildSteps } from "./stepsGenerator";
 
 export function calculateVolume(input: RevolveInput): VolumeResult {
-  if (input.a >= input.b) {
-    throw new Error("下限 a 必须小于上限 b（a < b）。");
-  }
-
-  if (
-    (input.axisMode === "y=k" || input.axisMode === "x=k") &&
-    (input.k === undefined || Number.isNaN(input.k))
-  ) {
-    throw new Error("请为自定义旋转轴输入 k 的值。");
-  }
-
+  validateRevolutionAxisInput(input);
+  const axis = resolveRevolutionAxis(input);
   const f = parseFunction(input.fExpr);
   const g = parseFunction(input.gExpr);
 
@@ -30,19 +27,22 @@ export function calculateVolume(input: RevolveInput): VolumeResult {
 
   let warning: string | undefined =
     "本版本最适合函数以 x 表示、且积分区间为 x 值的情形。";
-
-  switch (input.axisMode) {
-    case "x-axis":
-      return computeWasherXAxis(input, f, g, warning);
-    case "y=k":
-      return computeWasherHorizontal(input, f, g, warning);
-    case "y-axis":
-      return computeShellYAxis(input, f, g, warning);
-    case "x=k":
-      return computeShellVertical(input, f, g, warning);
-    default:
-      throw new Error("不支持的旋转轴类型。");
+  if (input.axisMode === "custom") {
+    warning += " 自定义轴请写成 y = f(x)（如 y = 2、y = sin(x)）或 x = 常数（如 x = -3）。";
   }
+
+  if (axis.kind === "horizontal") {
+    if (input.axisMode === "x-axis") {
+      return computeWasherXAxis(input, f, g, warning);
+    }
+    return computeWasherHorizontalAxis(input, f, g, axis, warning);
+  }
+
+  if (input.axisMode === "y-axis") {
+    return computeShellYAxis(input, f, g, warning);
+  }
+
+  return computeShellVerticalAxis(input, f, g, axis, warning);
 }
 
 function computeWasherXAxis(
@@ -122,27 +122,28 @@ function computeWasherXAxis(
   };
 }
 
-function computeWasherHorizontal(
+function computeWasherHorizontalAxis(
   input: RevolveInput,
   f: (x: number) => number,
   g: (x: number) => number,
+  axis: HorizontalAxis,
   warning?: string
 ): VolumeResult {
-  const k = input.k!;
   const integrand = (x: number) => {
     const fv = f(x);
     const gv = g(x);
-    const { R, r } = washerRadiiHorizontal(fv, gv, k);
+    const hx = axis.h(x);
+    const { R, r } = washerRadiiHorizontal(fv, gv, hx);
     return Math.PI * (R * R - r * r);
   };
 
   const volume = integrateSimpson(integrand, input.a, input.b);
 
-  const outerRadiusDesc = `从直线 y = ${k} 到该截面较远曲线的距离`;
-  const innerRadiusDesc = `从直线 y = ${k} 到该截面较近曲线的距离`;
+  const outerRadiusDesc = `从旋转轴 ${axis.label} 到该截面较远曲线的距离`;
+  const innerRadiusDesc = `从旋转轴 ${axis.label} 到该截面较近曲线的距离`;
 
-  const outerRadiusLatex = `R(x) = \\text{dist from } y=${k} \\text{ to outer curve}`;
-  const innerRadiusLatex = `r(x) = \\text{dist from } y=${k} \\text{ to inner curve}`;
+  const outerRadiusLatex = `R(x) = \\text{dist from } ${axis.label} \\text{ to outer curve}`;
+  const innerRadiusLatex = `r(x) = \\text{dist from } ${axis.label} \\text{ to inner curve}`;
 
   const fDisp = formatExprForDisplay(input.fExpr);
   const gDisp = formatExprForDisplay(input.gExpr);
@@ -162,8 +163,10 @@ function computeWasherHorizontal(
     fDisp,
     gDisp,
     volume,
-    axisExtra: `水平线 y = ${k}`,
+    axisExtra: axis.label,
   });
+
+  const midX = (input.a + input.b) / 2;
 
   return {
     kind: "revolution",
@@ -188,12 +191,13 @@ function computeWasherHorizontal(
       outerRadiusDesc,
       innerRadiusDesc,
       volume,
-      warning
+      warning,
+      axis.label
     ),
     warning,
     graphMeta: {
-      axisLabel: `y = ${k}`,
-      axisValue: k,
+      axisLabel: axis.label,
+      axisValue: axis.h(midX),
       methodLabel: "垫圈 / 圆盘法",
     },
   };
@@ -274,13 +278,14 @@ function computeShellYAxis(
   };
 }
 
-function computeShellVertical(
+function computeShellVerticalAxis(
   input: RevolveInput,
   f: (x: number) => number,
   g: (x: number) => number,
+  axis: VerticalAxis,
   warning?: string
 ): VolumeResult {
-  const k = input.k!;
+  const k = axis.k;
   const integrand = (x: number) => {
     const height = Math.abs(f(x) - g(x));
     return 2 * Math.PI * Math.abs(x - k) * height;
@@ -288,7 +293,7 @@ function computeShellVertical(
 
   const volume = integrateSimpson(integrand, input.a, input.b);
 
-  const outerRadiusDesc = `从直线 x = ${k} 到切片的水平距离（半径 = |x − ${k}|）`;
+  const outerRadiusDesc = `从旋转轴 ${axis.label} 到切片的水平距离（半径 = |x − ${k}|）`;
   const innerRadiusDesc = "柱壳法每个切片只需一个半径，不设内半径";
 
   const outerRadiusLatex = `p(x) = |x - ${k}|`;
@@ -312,7 +317,7 @@ function computeShellVertical(
     fDisp,
     gDisp,
     volume,
-    axisExtra: `垂直线 x = ${k}`,
+    axisExtra: axis.label,
     shellHeight: "|f(x) − g(x)|",
     shellRadius: `|x − ${k}|`,
   });
@@ -340,11 +345,12 @@ function computeShellVertical(
       outerRadiusDesc,
       innerRadiusDesc,
       volume,
-      warning
+      warning,
+      axis.label
     ),
     warning,
     graphMeta: {
-      axisLabel: `x = ${k}`,
+      axisLabel: axis.label,
       axisValue: k,
       methodLabel: "柱壳法",
     },

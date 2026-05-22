@@ -7,26 +7,32 @@ export function generateAIExplanation(
   outerDesc: string,
   innerDesc: string,
   volume: number,
-  warning?: string
+  warning?: string,
+  axisLabel?: string
 ): string {
   const f = formatExprForDisplay(input.fExpr);
   const g = formatExprForDisplay(input.gExpr);
   const interval = `x = ${input.a} 到 x = ${input.b}`;
 
-  let axisPhrase = "";
-  switch (input.axisMode) {
-    case "x-axis":
-      axisPhrase = "x 轴";
-      break;
-    case "y-axis":
-      axisPhrase = "y 轴";
-      break;
-    case "y=k":
-      axisPhrase = `水平线 y = ${input.k}`;
-      break;
-    case "x=k":
-      axisPhrase = `垂直线 x = ${input.k}`;
-      break;
+  let axisPhrase = axisLabel ?? "";
+  if (!axisPhrase) {
+    switch (input.axisMode) {
+      case "x-axis":
+        axisPhrase = "x 轴";
+        break;
+      case "y-axis":
+        axisPhrase = "y 轴";
+        break;
+      case "y=k":
+        axisPhrase = `水平线 y = ${input.k}`;
+        break;
+      case "x=k":
+        axisPhrase = `垂直线 x = ${input.k}`;
+        break;
+      case "custom":
+        axisPhrase = input.customAxisExpr?.trim() || "自定义旋转轴";
+        break;
+    }
   }
 
   const methodName = method === "washer" ? "垫圈" : "柱壳";

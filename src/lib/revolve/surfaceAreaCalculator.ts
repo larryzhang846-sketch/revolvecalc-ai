@@ -3,6 +3,11 @@ import type {
   SurfaceAreaCurvePart,
   SurfaceAreaOutcome,
 } from "@/types/surfaceArea";
+import {
+  resolveRevolutionAxis,
+  validateRevolutionAxisInput,
+  type HorizontalAxis,
+} from "./axisParser";
 import { integrateSimpson, formatNumber } from "./integration";
 import {
   formatExprForDisplay,
@@ -54,35 +59,17 @@ function derivativeExprString(expr: string): string {
   return formatExprForDisplay(derivative.toString());
 }
 
-function radiusAt(
-  y: number,
-  axisMode: RevolveInput["axisMode"],
-  k?: number
-): number {
-  if (axisMode === "x-axis") return Math.abs(y);
-  return Math.abs(y - k!);
+function radiusAt(y: number, x: number, axis: HorizontalAxis): number {
+  return Math.abs(y - axis.h(x));
 }
 
-function radiusDescription(
-  curveLabel: string,
-  axisMode: RevolveInput["axisMode"],
-  k?: number
-): string {
-  if (axisMode === "x-axis") {
-    return `${curveLabel}(x) 到 x 轴的距离：R(x) = |${curveLabel}(x)|`;
-  }
-  return `${curveLabel}(x) 到直线 y = ${k} 的距离：R(x) = |${curveLabel}(x) − ${k}|`;
+function radiusDescription(curveLabel: string, axis: HorizontalAxis): string {
+  return `${curveLabel}(x) 到旋转轴 ${axis.label} 的距离：R(x) = |${curveLabel}(x) − (${axis.label})|`;
 }
 
-function radiusLatex(
-  curveLabel: string,
-  axisMode: RevolveInput["axisMode"],
-  k?: number
-): string {
-  if (axisMode === "x-axis") {
-    return `R_{${curveLabel}}(x) = \\left|${curveLabel}(x)\\right|`;
-  }
-  return `R_{${curveLabel}}(x) = \\left|${curveLabel}(x) - ${k}\\right|`;
+function radiusLatex(curveLabel: string, axis: HorizontalAxis): string {
+  const axisRhs = axis.label.replace(/^y\s*=\s*/i, "");
+  return `R_{${curveLabel}}(x) = \\left|${curveLabel}(x) - (${axisRhs})\\right|`;
 }
 
 function derivativeLatex(curveLabel: string, expr: string): string {
@@ -91,15 +78,9 @@ function derivativeLatex(curveLabel: string, expr: string): string {
   return `\\frac{d}{dx}\\left(${disp}\\right) = ${dStr}`;
 }
 
-function integrandLatex(
-  curveLabel: string,
-  axisMode: RevolveInput["axisMode"],
-  k?: number
-): string {
-  const r =
-    axisMode === "x-axis"
-      ? `\\left|${curveLabel}(x)\\right|`
-      : `\\left|${curveLabel}(x) - ${k}\\right|`;
+function integrandLatex(curveLabel: string, axis: HorizontalAxis): string {
+  const axisRhs = axis.label.replace(/^y\s*=\s*/i, "");
+  const r = `\\left|${curveLabel}(x) - (${axisRhs})\\right|`;
   return `2\\pi \\cdot ${r} \\cdot \\sqrt{1 + \\left(\\frac{d${curveLabel}}{dx}\\right)^2}`;
 }
 
@@ -107,14 +88,14 @@ function computeCurveSurface(
   expr: string,
   curveLabel: "f" | "g",
   input: RevolveInput,
+  axis: HorizontalAxis,
   yFn: (x: number) => number,
   dydx: (x: number) => number
 ): SurfaceAreaCurvePart {
-  const k = input.k;
   const integrand = (x: number) => {
     const y = yFn(x);
     const slope = dydx(x);
-    const r = radiusAt(y, input.axisMode, k);
+    const r = radiusAt(y, x, axis);
     return 2 * Math.PI * r * Math.sqrt(1 + slope * slope);
   };
 
@@ -124,11 +105,11 @@ function computeCurveSurface(
   return {
     curveLabel,
     exprDisp: disp,
-    radiusDesc: radiusDescription(curveLabel, input.axisMode, k),
-    radiusLatex: radiusLatex(curveLabel, input.axisMode, k),
+    radiusDesc: radiusDescription(curveLabel, axis),
+    radiusLatex: radiusLatex(curveLabel, axis),
     derivativeDesc: `${curveLabel}'(x) 为 ${curveLabel}(x) = ${disp} 对 x 的导数`,
     derivativeLatex: derivativeLatex(curveLabel, expr),
-    integrandLatex: integrandLatex(curveLabel, input.axisMode, k),
+    integrandLatex: integrandLatex(curveLabel, axis),
     fullIntegralLatex: `S_{${curveLabel}} = 2\\pi\\int_{${input.a}}^{${input.b}} R_{${curveLabel}}(x)\\,\\sqrt{1 + \\left(\\frac{d${curveLabel}}{dx}\\right)^2}\\,dx`,
     evaluatedLatex: `S_{${curveLabel}} \\approx ${formatNumber(partialArea)}`,
     partialArea,
@@ -138,21 +119,14 @@ function computeCurveSurface(
 export function calculateSurfaceArea(
   input: RevolveInput
 ): SurfaceAreaOutcome {
-  if (input.axisMode === "y-axis" || input.axisMode === "x=k") {
+  const resolved = resolveRevolutionAxis(input);
+  if (resolved.kind === "vertical") {
     return { status: "unsupported-axis", message: UNSUPPORTED_AXIS_MSG };
   }
 
-  if (
-    input.axisMode === "y=k" &&
-    (input.k === undefined || Number.isNaN(input.k))
-  ) {
-    throw new Error("请为自定义旋转轴输入 k 的值。");
-  }
+  validateRevolutionAxisInput(input);
 
-  if (input.a >= input.b) {
-    throw new Error("下限 a 必须小于上限 b（a < b）。");
-  }
-
+  const axis = resolved;
   const f = parseFunction(input.fExpr);
   const g = parseFunction(input.gExpr);
   const fPrime = parseDerivative(input.fExpr);
@@ -166,22 +140,11 @@ export function calculateSurfaceArea(
     g(x);
     fPrime(x);
     gPrime(x);
+    axis.h(x);
   }
 
-  const curveF = computeCurveSurface(
-    input.fExpr,
-    "f",
-    input,
-    f,
-    fPrime
-  );
-  const curveG = computeCurveSurface(
-    input.gExpr,
-    "g",
-    input,
-    g,
-    gPrime
-  );
+  const curveF = computeCurveSurface(input.fExpr, "f", input, axis, f, fPrime);
+  const curveG = computeCurveSurface(input.gExpr, "g", input, axis, g, gPrime);
 
   const totalArea = curveF.partialArea + curveG.partialArea;
   const fDisp = formatExprForDisplay(input.fExpr);

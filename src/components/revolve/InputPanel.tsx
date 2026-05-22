@@ -18,6 +18,7 @@ export interface InputFormState {
   b: string;
   axisMode: AxisMode;
   k: string;
+  customAxisExpr: string;
   crossSectionShape: CrossSectionShape;
   rectangleK: string;
 }
@@ -49,6 +50,7 @@ const AXIS_OPTIONS: { value: AxisMode; label: string }[] = [
   { value: "y-axis", label: "y 轴 (x = 0)" },
   { value: "y=k", label: "水平线 y = k" },
   { value: "x=k", label: "垂直线 x = k" },
+  { value: "custom", label: "自定义旋转轴" },
 ];
 
 const CROSS_SHAPE_OPTIONS: {
@@ -162,6 +164,8 @@ export function InputPanel({
                 type="button"
                 onClick={() => set({ axisMode: opt.value })}
                 className={`rounded-xl border px-3 py-2.5 text-left text-xs transition-all duration-200 sm:text-sm ${
+                  opt.value === "custom" ? "col-span-2" : ""
+                } ${
                   form.axisMode === opt.value
                     ? "border-violet-500/50 bg-violet-500/15 text-violet-100 shadow-glow"
                     : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-violet-500/25 hover:text-slate-200"
@@ -182,6 +186,24 @@ export function InputPanel({
                 placeholder={form.axisMode === "y=k" ? "例如 3" : "例如 -1"}
                 className="input-field"
               />
+            </label>
+          )}
+
+          {form.axisMode === "custom" && (
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-sm text-slate-300">
+                旋转轴方程
+              </span>
+              <input
+                type="text"
+                value={form.customAxisExpr}
+                onChange={(e) => set({ customAxisExpr: e.target.value })}
+                placeholder="例如 y = 2、y = sin(x)、x = -3"
+                className="input-field font-mono"
+              />
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                支持 y = f(x)（垫圈法）或 x = 常数（柱壳法），如 y = x、y = 2、x = -3。
+              </p>
             </label>
           )}
         </div>
@@ -262,7 +284,11 @@ export function InputPanel({
               <span className="mt-0.5 block text-xs text-slate-500">
                 f(x)={ex.fExpr}, g(x)={ex.gExpr}, [{ex.a}, {ex.b}]
                 {ex.mode === "revolution" && ex.axisMode
-                  ? `, ${AXIS_MODE_ZH[ex.axisMode]}`
+                  ? `, ${
+                      ex.axisMode === "custom" && ex.customAxisExpr
+                        ? ex.customAxisExpr
+                        : AXIS_MODE_ZH[ex.axisMode]
+                    }`
                   : ex.crossShape
                     ? `, ${CROSS_SHAPE_OPTIONS.find((o) => o.value === ex.crossShape)?.label}`
                     : ""}

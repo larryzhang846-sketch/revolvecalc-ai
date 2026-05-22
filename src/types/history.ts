@@ -18,6 +18,7 @@ export interface CalculationHistoryEntry {
   createdAt: string;
   axisMode?: AxisMode;
   k?: number;
+  customAxisExpr?: string;
   crossSectionShape?: CrossSectionShape;
   rectangleK?: number;
 }

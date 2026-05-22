@@ -1,4 +1,5 @@
 import type { RevolveInput } from "@/types/revolve";
+import { resolveRevolutionAxis } from "./axisParser";
 import { formatExprForDisplay } from "./mathParser";
 import { formatNumber } from "./integration";
 
@@ -9,15 +10,13 @@ export function generateSurfaceAreaExplanation(
   totalArea: number
 ): string {
   const interval = `x = ${input.a} 到 x = ${input.b}`;
-  const axisPhrase =
-    input.axisMode === "x-axis"
-      ? "x 轴（y = 0）"
-      : `水平线 y = ${input.k}`;
+  const axis = resolveRevolutionAxis(input);
+  const axisPhrase = axis.kind === "horizontal" ? axis.label : "旋转轴";
 
   const radiusNote =
-    input.axisMode === "x-axis"
-      ? "每条曲线到 x 轴的距离 |y| 作为旋转半径"
-      : `每条曲线到直线 y = ${input.k} 的距离 |y − k| 作为旋转半径`;
+    axis.kind === "horizontal"
+      ? `每条曲线到旋转轴 ${axis.label} 在 x 处的距离 |y − (${axis.label})| 作为旋转半径`
+      : "每条曲线到旋转轴的距离作为旋转半径";
 
   return (
     `在 ${interval} 上，将 f(x) = ${fDisp} 与 g(x) = ${gDisp} 分别视为两条边界曲线，` +

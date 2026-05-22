@@ -1,31 +1,24 @@
 import * as THREE from "three";
-import type { AxisMode } from "@/types/revolve";
+import type { RevolutionAxis } from "./axisParser";
 import type { EvalFn } from "./mathParser";
 
 function mapPoint(
   x: number,
   y: number,
   theta: number,
-  axisMode: AxisMode,
-  k: number
+  axis: RevolutionAxis
 ): THREE.Vector3 {
   const c = Math.cos(theta);
   const s = Math.sin(theta);
 
-  switch (axisMode) {
-    case "x-axis":
-      return new THREE.Vector3(x, y * c, y * s);
-    case "y-axis":
-      return new THREE.Vector3(x * c, y, x * s);
-    case "y=k": {
-      const dy = y - k;
-      return new THREE.Vector3(x, k + dy * c, dy * s);
-    }
-    case "x=k": {
-      const dx = x - k;
-      return new THREE.Vector3(k + dx * c, y, dx * s);
-    }
+  if (axis.kind === "horizontal") {
+    const hx = axis.h(x);
+    const dy = y - hx;
+    return new THREE.Vector3(x, hx + dy * c, dy * s);
   }
+
+  const dx = x - axis.k;
+  return new THREE.Vector3(axis.k + dx * c, y, dx * s);
 }
 
 function pushSurface(
@@ -35,8 +28,7 @@ function pushSurface(
   g: EvalFn,
   a: number,
   b: number,
-  axisMode: AxisMode,
-  k: number,
+  axis: RevolutionAxis,
   pickY: "top" | "bottom",
   segmentsX: number,
   segmentsTheta: number
@@ -52,7 +44,7 @@ function pushSurface(
 
     for (let j = 0; j <= segmentsTheta; j++) {
       const theta = (j / segmentsTheta) * Math.PI * 2;
-      const p = mapPoint(x, y, theta, axisMode, k);
+      const p = mapPoint(x, y, theta, axis);
       row.push(positions.length / 3);
       positions.push(p.x, p.y, p.z);
     }
@@ -80,22 +72,21 @@ function pushEndCap(
   x: number,
   f: EvalFn,
   g: EvalFn,
-  axisMode: AxisMode,
-  k: number,
+  axis: RevolutionAxis,
   segmentsTheta: number
 ) {
   const fv = f(x);
   const gv = g(x);
   const ymin = Math.min(fv, gv);
   const ymax = Math.max(fv, gv);
-  const center = mapPoint(x, (ymin + ymax) / 2, 0, axisMode, k);
+  const center = mapPoint(x, (ymin + ymax) / 2, 0, axis);
   const centerIdx = positions.length / 3;
   positions.push(center.x, center.y, center.z);
 
   const ring: number[] = [];
   for (let j = 0; j <= segmentsTheta; j++) {
     const theta = (j / segmentsTheta) * Math.PI * 2;
-    const p = mapPoint(x, ymax, theta, axisMode, k);
+    const p = mapPoint(x, ymax, theta, axis);
     ring.push(positions.length / 3);
     positions.push(p.x, p.y, p.z);
   }
@@ -110,18 +101,17 @@ export function buildSolidGeometry(
   g: EvalFn,
   a: number,
   b: number,
-  axisMode: AxisMode,
-  k = 0,
-  segmentsX = 44,
-  segmentsTheta = 52
+  axis: RevolutionAxis,
+  segmentsX = 28,
+  segmentsTheta = 32
 ): THREE.BufferGeometry {
   const positions: number[] = [];
   const indices: number[] = [];
 
-  pushSurface(positions, indices, f, g, a, b, axisMode, k, "top", segmentsX, segmentsTheta);
-  pushSurface(positions, indices, f, g, a, b, axisMode, k, "bottom", segmentsX, segmentsTheta);
-  pushEndCap(positions, indices, a, f, g, axisMode, k, segmentsTheta);
-  pushEndCap(positions, indices, b, f, g, axisMode, k, segmentsTheta);
+  pushSurface(positions, indices, f, g, a, b, axis, "top", segmentsX, segmentsTheta);
+  pushSurface(positions, indices, f, g, a, b, axis, "bottom", segmentsX, segmentsTheta);
+  pushEndCap(positions, indices, a, f, g, axis, segmentsTheta);
+  pushEndCap(positions, indices, b, f, g, axis, segmentsTheta);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
@@ -138,8 +128,7 @@ export function solidBoundingSize(
   g: EvalFn,
   a: number,
   b: number,
-  axisMode: AxisMode,
-  k = 0
+  axis: RevolutionAxis
 ): number {
   const samples = 24;
   let maxR = 0;
@@ -150,13 +139,42 @@ export function solidBoundingSize(
     const ymin = Math.min(fv, gv);
     const ymax = Math.max(fv, gv);
     const pts = [
-      mapPoint(x, ymin, 0, axisMode, k),
-      mapPoint(x, ymax, 0, axisMode, k),
-      mapPoint(x, ymax, Math.PI / 2, axisMode, k),
+      mapPoint(x, ymin, 0, axis),
+      mapPoint(x, ymax, 0, axis),
+      mapPoint(x, ymax, Math.PI / 2, axis),
     ];
     for (const p of pts) {
       maxR = Math.max(maxR, Math.abs(p.x), Math.abs(p.y), Math.abs(p.z));
     }
   }
   return Math.max(maxR * 1.6, 2);
+}
+
+export function axisGuidePoints(
+  axis: RevolutionAxis,
+  a: number,
+  b: number,
+  extent: number
+): [number, number, number][] {
+  if (axis.kind === "vertical") {
+    const len = extent * 1.4;
+    return [
+      [axis.k, -len, 0],
+      [axis.k, len, 0],
+    ];
+  }
+
+  const lo = Math.min(a, b) - extent * 0.25;
+  const hi = Math.max(a, b) + extent * 0.25;
+  const segments = 72;
+  const points: [number, number, number][] = [];
+  for (let i = 0; i <= segments; i++) {
+    const x = lo + (i / segments) * (hi - lo);
+    try {
+      points.push([x, axis.h(x), 0]);
+    } catch {
+      break;
+    }
+  }
+  return points.length >= 2 ? points : [[lo, 0, 0], [hi, 0, 0]];
 }

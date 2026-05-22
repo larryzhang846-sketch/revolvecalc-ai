@@ -47,6 +47,9 @@ export function formatModeDetailLabel(form: InputFormState): string {
       const k = form.k.trim() || "0";
       return form.axisMode === "y=k" ? `水平线 y = ${k}` : `垂直线 x = ${k}`;
     }
+    if (form.axisMode === "custom") {
+      return form.customAxisExpr.trim() || base;
+    }
     return base;
   }
   const shapeLabel = CROSS_SHAPE_ZH[form.crossSectionShape];
@@ -78,6 +81,10 @@ export function buildHistoryEntry(
       (form.axisMode === "y=k" || form.axisMode === "x=k")
         ? parseFloat(form.k)
         : undefined,
+    customAxisExpr:
+      form.calculationMode === "revolution" && form.axisMode === "custom"
+        ? form.customAxisExpr
+        : undefined,
     crossSectionShape:
       form.calculationMode === "cross-section"
         ? form.crossSectionShape
@@ -101,6 +108,7 @@ export function historyEntryToForm(
     b: String(entry.b),
     axisMode: entry.axisMode ?? "x-axis",
     k: entry.k !== undefined ? String(entry.k) : "0",
+    customAxisExpr: entry.customAxisExpr ?? "y = 0",
     crossSectionShape: entry.crossSectionShape ?? "square",
     rectangleK:
       entry.rectangleK !== undefined ? String(entry.rectangleK) : "1",

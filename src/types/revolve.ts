@@ -1,6 +1,6 @@
 export type CalculationMode = "revolution" | "cross-section";
 
-export type AxisMode = "x-axis" | "y-axis" | "y=k" | "x=k";
+export type AxisMode = "x-axis" | "y-axis" | "y=k" | "x=k" | "custom";
 
 export type VolumeMethod = "washer" | "shell";
 
@@ -17,6 +17,8 @@ export interface RevolveInput {
   b: number;
   axisMode: AxisMode;
   k?: number;
+  /** 自定义旋转轴方程，例如 y = sin(x)、x = -3 */
+  customAxisExpr?: string;
 }
 
 export interface CrossSectionInput {
@@ -90,6 +92,7 @@ export interface ExampleProblem {
   mode: CalculationMode;
   axisMode?: AxisMode;
   k?: number;
+  customAxisExpr?: string;
   crossShape?: CrossSectionShape;
   rectangleK?: number;
 }

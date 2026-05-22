@@ -4,17 +4,17 @@ import { Suspense, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import type { AxisMode, VolumeResult } from "@/types/revolve";
+import type { RevolveInput, VolumeResult } from "@/types/revolve";
+import { resolveRevolutionAxis } from "@/lib/revolve/axisParser";
 import { parseFunction } from "@/lib/revolve/mathParser";
-import { buildSolidGeometry, solidBoundingSize } from "@/lib/revolve/solidMesh";
+import {
+  axisGuidePoints,
+  buildSolidGeometry,
+  solidBoundingSize,
+} from "@/lib/revolve/solidMesh";
 
 interface SolidVisualization3DProps {
-  fExpr: string;
-  gExpr: string;
-  a: number;
-  b: number;
-  axisMode: AxisMode;
-  k?: number;
+  revolveInput: RevolveInput;
   result?: VolumeResult | null;
 }
 
@@ -36,50 +36,18 @@ function SolidMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
 }
 
 function AxisGuide({
-  axisMode,
-  k = 0,
-  extent,
+  points,
 }: {
-  axisMode: AxisMode;
-  k?: number;
-  extent: number;
+  points: [number, number, number][];
 }) {
-  const len = extent * 1.4;
-  let points: [number, number, number][] = [];
-
-  switch (axisMode) {
-    case "x-axis":
-      points = [
-        [-len, 0, 0],
-        [len, 0, 0],
-      ];
-      break;
-    case "y-axis":
-      points = [
-        [0, -len, 0],
-        [0, len, 0],
-      ];
-      break;
-    case "y=k":
-      points = [
-        [-len, k, 0],
-        [len, k, 0],
-      ];
-      break;
-    case "x=k":
-      points = [
-        [k, -len, 0],
-        [k, len, 0],
-      ];
-      break;
-  }
+  if (points.length < 2) return null;
 
   return (
     <Line
       points={points}
       color="#fbbf24"
       lineWidth={2}
-      dashed
+      dashed={points.length === 2}
       dashSize={0.15}
       gapSize={0.1}
     />
@@ -88,13 +56,11 @@ function AxisGuide({
 
 function Scene({
   geometry,
-  axisMode,
-  k,
+  axisPoints,
   extent,
 }: {
   geometry: THREE.BufferGeometry;
-  axisMode: AxisMode;
-  k?: number;
+  axisPoints: [number, number, number][];
   extent: number;
 }) {
   const dist = extent * 2.2;
@@ -106,7 +72,7 @@ function Scene({
       <directionalLight position={[5, 8, 6]} intensity={1.1} castShadow />
       <directionalLight position={[-4, -2, -5]} intensity={0.35} color="#22d3ee" />
       <SolidMesh geometry={geometry} />
-      <AxisGuide axisMode={axisMode} k={k} extent={extent} />
+      <AxisGuide points={axisPoints} />
       <gridHelper args={[extent * 3, 16, "#334155", "#1e293b"]} position={[0, -extent * 0.01, 0]} />
       <OrbitControls
         autoRotate={false}
@@ -120,32 +86,29 @@ function Scene({
 }
 
 export function SolidVisualization3D({
-  fExpr,
-  gExpr,
-  a,
-  b,
-  axisMode,
-  k,
+  revolveInput,
   result,
 }: SolidVisualization3DProps) {
   const meshData = useMemo(() => {
     try {
-      const f = parseFunction(fExpr);
-      const g = parseFunction(gExpr);
-      const lo = Math.min(a, b);
-      const hi = Math.max(a, b);
-      const kVal = k ?? 0;
-      const geometry = buildSolidGeometry(f, g, lo, hi, axisMode, kVal);
-      const extent = solidBoundingSize(f, g, lo, hi, axisMode, kVal);
-      return { geometry, extent, error: null as string | null };
+      const axis = resolveRevolutionAxis(revolveInput);
+      const f = parseFunction(revolveInput.fExpr);
+      const g = parseFunction(revolveInput.gExpr);
+      const lo = Math.min(revolveInput.a, revolveInput.b);
+      const hi = Math.max(revolveInput.a, revolveInput.b);
+      const geometry = buildSolidGeometry(f, g, lo, hi, axis);
+      const extent = solidBoundingSize(f, g, lo, hi, axis);
+      const axisPoints = axisGuidePoints(axis, lo, hi, extent);
+      return { geometry, extent, axisPoints, error: null as string | null };
     } catch (e) {
       return {
         geometry: null,
         extent: 4,
+        axisPoints: [] as [number, number, number][],
         error: e instanceof Error ? e.message : "无法生成三维模型",
       };
     }
-  }, [fExpr, gExpr, a, b, axisMode, k]);
+  }, [revolveInput]);
 
   if (meshData.error || !meshData.geometry) {
     return (
@@ -180,8 +143,7 @@ export function SolidVisualization3D({
           <Suspense fallback={null}>
             <Scene
               geometry={meshData.geometry}
-              axisMode={axisMode}
-              k={k}
+              axisPoints={meshData.axisPoints}
               extent={meshData.extent}
             />
           </Suspense>

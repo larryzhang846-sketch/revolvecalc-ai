@@ -5,4 +5,5 @@ export const AXIS_MODE_ZH: Record<AxisMode, string> = {
   "y-axis": "y 轴",
   "y=k": "水平线 y = k",
   "x=k": "垂直线 x = k",
+  custom: "自定义旋转轴",
 };

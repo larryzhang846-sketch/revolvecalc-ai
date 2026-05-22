@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { InputPanel, type InputFormState } from "./InputPanel";
 import { SolutionPanel } from "./SolutionPanel";
@@ -59,6 +59,7 @@ const DEFAULT_FORM: InputFormState = {
   b: "2",
   axisMode: "x-axis",
   k: "0",
+  customAxisExpr: "y = 0",
   crossSectionShape: "square",
   rectangleK: "1",
 };
@@ -74,6 +75,8 @@ function formToRevolveInput(form: InputFormState): RevolveInput {
       form.axisMode === "y=k" || form.axisMode === "x=k"
         ? parseFloat(form.k)
         : undefined,
+    customAxisExpr:
+      form.axisMode === "custom" ? form.customAxisExpr : undefined,
   };
 }
 
@@ -167,6 +170,7 @@ export function RevolveCalcApp() {
       b: String(ex.b),
       axisMode: ex.axisMode ?? "x-axis",
       k: ex.k !== undefined ? String(ex.k) : "0",
+      customAxisExpr: ex.customAxisExpr ?? "y = 0",
       crossSectionShape: ex.crossShape ?? "square",
       rectangleK: ex.rectangleK !== undefined ? String(ex.rectangleK) : "1",
     };
@@ -182,6 +186,7 @@ export function RevolveCalcApp() {
             b: ex.b,
             axisMode: ex.axisMode!,
             k: ex.k,
+            customAxisExpr: ex.customAxisExpr,
           })
         );
         setSurfaceArea(
@@ -192,6 +197,7 @@ export function RevolveCalcApp() {
             b: ex.b,
             axisMode: ex.axisMode!,
             k: ex.k,
+            customAxisExpr: ex.customAxisExpr,
           })
         );
       } else {
@@ -215,9 +221,16 @@ export function RevolveCalcApp() {
 
   const aNum = parseFloat(form.a) || 0;
   const bNum = parseFloat(form.b) || 2;
-  const kNum = parseFloat(form.k);
   const rectK = parseFloat(form.rectangleK) || 1;
   const isRevolution = form.calculationMode === "revolution";
+  const revolveInput = useMemo(() => {
+    if (!isRevolution) return null;
+    try {
+      return formToRevolveInput(form);
+    } catch {
+      return null;
+    }
+  }, [form, isRevolution]);
   const revolutionResult =
     result?.kind === "revolution" ? (result as VolumeResult) : null;
   const crossResult =
@@ -265,19 +278,16 @@ export function RevolveCalcApp() {
               {isRevolution ? "三维旋转体" : "截面法可视化"}
             </h2>
             {isRevolution ? (
+              revolveInput ? (
               <SolidVisualization3D
-                fExpr={form.fExpr}
-                gExpr={form.gExpr}
-                a={aNum}
-                b={bNum}
-                axisMode={form.axisMode}
-                k={
-                  form.axisMode === "y=k" || form.axisMode === "x=k"
-                    ? kNum
-                    : undefined
-                }
+                revolveInput={revolveInput}
                 result={revolutionResult}
               />
+              ) : (
+                <div className="flex h-[400px] items-center justify-center rounded-2xl border border-white/5 bg-surface/50 px-6 text-center text-sm text-slate-400">
+                  请填写有效的函数、区间与旋转轴方程以预览三维旋转体。
+                </div>
+              )
             ) : (
               <CrossSectionVisualization3D
                 fExpr={form.fExpr}

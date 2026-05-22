@@ -40,7 +40,7 @@ export function RegionGraph2D({
       const pad = span * 0.08;
       const xMin = lo - pad;
       const xMax = hi + pad;
-      const steps = 80;
+      const steps = 48;
       const dx = (xMax - xMin) / steps;
       const points: {
         x: number;

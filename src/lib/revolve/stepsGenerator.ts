@@ -1,4 +1,5 @@
 import type { RevolveInput, SolutionStep, VolumeMethod } from "@/types/revolve";
+import { resolveRevolutionAxis } from "./axisParser";
 import { formatNumber } from "./integration";
 
 interface StepContext {
@@ -19,6 +20,9 @@ interface StepContext {
 
 function axisDescription(input: RevolveInput, axisExtra?: string): string {
   if (axisExtra) return axisExtra;
+  if (input.axisMode === "custom") {
+    return resolveRevolutionAxis(input).label;
+  }
   switch (input.axisMode) {
     case "x-axis":
       return "x 轴（y = 0）";
@@ -28,19 +32,34 @@ function axisDescription(input: RevolveInput, axisExtra?: string): string {
       return `水平线 y = ${input.k}`;
     case "x=k":
       return `垂直线 x = ${input.k}`;
+    default:
+      return "旋转轴";
   }
 }
 
-function methodReason(method: VolumeMethod, axisMode: RevolveInput["axisMode"]): string {
+function methodReason(method: VolumeMethod, input: RevolveInput): string {
   if (method === "washer") {
-    if (axisMode === "x-axis" || axisMode === "y=k") {
+    if (
+      input.axisMode === "x-axis" ||
+      input.axisMode === "y=k" ||
+      input.axisMode === "custom"
+    ) {
+      if (input.axisMode === "custom") {
+        const axis = resolveRevolutionAxis(input);
+        if (axis.kind === "horizontal") {
+          return "旋转轴为 y = f(x) 型水平曲线，垂直于 x 轴的截面形成垫圈，因此对 x 积分。";
+        }
+      }
       return "旋转轴是水平的，垂直于 x 轴的截面形成垫圈（圆环），因此对 x 积分。";
     }
     return "使用垫圈法，半径垂直于水平旋转轴测量。";
   }
 
-  if (axisMode === "y-axis" || axisMode === "x=k") {
+  if (input.axisMode === "y-axis" || input.axisMode === "x=k") {
     return "旋转轴是竖直的，使用平行于 y 方向的圆柱壳较为方便，因此对 x 积分。";
+  }
+  if (input.axisMode === "custom") {
+    return "旋转轴为竖直直线，采用柱壳法，因此对 x 积分。";
   }
   return "旋转轴为竖直线，采用柱壳法。";
 }
@@ -84,7 +103,7 @@ export function buildSteps(ctx: StepContext): SolutionStep[] {
     {
       number: 4,
       title: `选择${methodName}法`,
-      body: methodReason(method, input.axisMode),
+      body: methodReason(method, input),
     },
     {
       number: 5,
