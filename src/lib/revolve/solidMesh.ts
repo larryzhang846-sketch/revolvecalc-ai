@@ -66,6 +66,95 @@ function pushSurface(
   }
 }
 
+/** 垂直轴旋转：在 x = 常数处将竖直边（y 从下到上）扫成圆柱侧壁 */
+function pushVerticalSideWall(
+  positions: number[],
+  indices: number[],
+  x: number,
+  f: EvalFn,
+  g: EvalFn,
+  axis: RevolutionAxis,
+  segmentsY: number,
+  segmentsTheta: number
+) {
+  if (axis.kind !== "vertical") return;
+
+  const ymin = Math.min(f(x), g(x));
+  const ymax = Math.max(f(x), g(x));
+  const grid: number[][] = [];
+
+  for (let j = 0; j <= segmentsY; j++) {
+    const y = ymin + (j / segmentsY) * (ymax - ymin);
+    const row: number[] = [];
+    for (let t = 0; t <= segmentsTheta; t++) {
+      const theta = (t / segmentsTheta) * Math.PI * 2;
+      const p = mapPoint(x, y, theta, axis);
+      row.push(positions.length / 3);
+      positions.push(p.x, p.y, p.z);
+    }
+    grid.push(row);
+  }
+
+  for (let j = 0; j < segmentsY; j++) {
+    for (let t = 0; t < segmentsTheta; t++) {
+      const a = grid[j][t];
+      const b = grid[j][t + 1];
+      const c = grid[j + 1][t];
+      const d = grid[j + 1][t + 1];
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+}
+
+function xBoundaryWalls(a: number, b: number, k: number): number[] {
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  const eps = 1e-8;
+  const walls: number[] = [];
+  if (Math.abs(lo - k) > eps) walls.push(lo);
+  if (Math.abs(hi - k) > eps && Math.abs(hi - lo) > eps) walls.push(hi);
+  return walls;
+}
+
+function buildVerticalAxisSolidGeometry(
+  f: EvalFn,
+  g: EvalFn,
+  a: number,
+  b: number,
+  axis: Extract<RevolutionAxis, { kind: "vertical" }>,
+  segmentsX: number,
+  segmentsTheta: number
+): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const segmentsY = segmentsX;
+
+  pushSurface(positions, indices, f, g, a, b, axis, "top", segmentsX, segmentsTheta);
+  pushSurface(positions, indices, f, g, a, b, axis, "bottom", segmentsX, segmentsTheta);
+
+  for (const xWall of xBoundaryWalls(a, b, axis.k)) {
+    pushVerticalSideWall(
+      positions,
+      indices,
+      xWall,
+      f,
+      g,
+      axis,
+      segmentsY,
+      segmentsTheta
+    );
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function pushEndCap(
   positions: number[],
   indices: number[],
@@ -105,6 +194,18 @@ export function buildSolidGeometry(
   segmentsX = 28,
   segmentsTheta = 32
 ): THREE.BufferGeometry {
+  if (axis.kind === "vertical") {
+    return buildVerticalAxisSolidGeometry(
+      f,
+      g,
+      a,
+      b,
+      axis,
+      segmentsX,
+      segmentsTheta
+    );
+  }
+
   const positions: number[] = [];
   const indices: number[] = [];
 

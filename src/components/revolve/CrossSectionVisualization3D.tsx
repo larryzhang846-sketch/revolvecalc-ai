@@ -196,17 +196,12 @@ function CrossSectionScene({
       <OrbitControls
         ref={controlsRef}
         autoRotate={false}
+        enableRotate
+        enableZoom
         enablePan
-        enableDamping
-        dampingFactor={0.06}
-        minDistance={isBaseStep ? dist * 0.85 : dist * 0.35}
-        maxDistance={isBaseStep ? dist * 1.35 : dist * 2.6}
-        target={isBaseStep ? [fit.target[0], fit.target[1], 0] : fit.target}
-        minPolarAngle={isBaseStep ? Math.PI / 2 - 0.08 : 0.55}
-        maxPolarAngle={isBaseStep ? Math.PI / 2 + 0.08 : Math.PI / 2 + 0.18}
-        {...(isBaseStep
-          ? { minAzimuthAngle: -0.12, maxAzimuthAngle: 0.12 }
-          : {})}
+        minDistance={dist * 0.35}
+        maxDistance={dist * 2.5}
+        target={fit.target}
       />
     </>
   );

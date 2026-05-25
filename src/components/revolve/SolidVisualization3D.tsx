@@ -35,19 +35,35 @@ function SolidMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
   );
 }
 
+function isValidAxisPoint(
+  point: [number, number, number] | undefined
+): point is [number, number, number] {
+  if (!point || point.length < 3) return false;
+  return point.every(
+    (c) => c !== undefined && typeof c === "number" && Number.isFinite(c)
+  );
+}
+
+function sanitizeAxisGuidePoints(
+  points: [number, number, number][]
+): [number, number, number][] {
+  return points.filter(isValidAxisPoint);
+}
+
 function AxisGuide({
   points,
 }: {
   points: [number, number, number][];
 }) {
-  if (points.length < 2) return null;
+  const validPoints = sanitizeAxisGuidePoints(points);
+  if (validPoints.length < 2) return null;
 
   return (
     <Line
-      points={points}
+      points={validPoints}
       color="#fbbf24"
       lineWidth={2}
-      dashed={points.length === 2}
+      dashed={validPoints.length === 2}
       dashSize={0.15}
       gapSize={0.1}
     />
