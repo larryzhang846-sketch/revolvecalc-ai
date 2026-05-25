@@ -4,14 +4,12 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { motion } from "framer-motion";
 import * as THREE from "three";
 import type { CrossSectionResult, CrossSectionShape } from "@/types/revolve";
@@ -77,97 +75,18 @@ function SliceSolidMesh({ geometry }: { geometry: THREE.BufferGeometry }) {
   );
 }
 
-/** 俯视时使底面占视口 fillRatio（默认 2/3），不超出取景范围 */
-function computeStep1TopDownDistance(
-  fit: CrossSectionSceneFit,
-  fovDeg: number,
-  aspect: number,
-  fillRatio = 2 / 3
-): number {
-  const tanHalf = Math.tan((fovDeg * Math.PI) / 180 / 2);
-  const margin = 1.02;
-  return (
-    margin *
-    Math.max(
-      fit.viewHalfX / (fillRatio * tanHalf * aspect),
-      fit.viewHalfY / (fillRatio * tanHalf)
-    )
-  );
-}
-
-/** 步骤 1 网格边长：对应完整取景框（底面为其 2/3） */
-function step1GridSize(fit: CrossSectionSceneFit, fillRatio = 2 / 3): number {
-  return (Math.max(fit.viewHalfX * 2, fit.viewHalfY * 2) / fillRatio) * 1.02;
-}
-
-/**
- * 步骤 1：沿 +Z 正对 xy 平面俯视，与上方 2D 截图一致。
- * 步骤 2：仍从 +Z 略偏，便于看到截面沿 +Z 叠高。
- */
-function applyDefaultCrossSectionView(
-  camera: THREE.Camera,
-  fit: CrossSectionSceneFit,
-  controls: OrbitControlsImpl | null,
-  visualStep: VisualStep
-) {
-  const [tx, ty, tz] = fit.target;
-  camera.up.set(0, 1, 0);
-
-  if (visualStep === 1 && camera instanceof THREE.PerspectiveCamera) {
-    const d = computeStep1TopDownDistance(fit, camera.fov, camera.aspect);
-    camera.position.set(tx, ty, d);
-    camera.lookAt(tx, ty, 0);
-    if (controls) {
-      controls.target.set(tx, ty, 0);
-    }
-  } else {
-    const d = fit.extent * 2.5;
-    camera.position.set(tx + d * 0.14, ty + d * 0.1, tz + d * 0.95);
-    camera.lookAt(tx, ty, tz * 0.35);
-    if (controls) {
-      controls.target.set(tx, ty, tz * 0.35);
-    }
-  }
-
-  if (camera instanceof THREE.PerspectiveCamera) {
-    camera.updateProjectionMatrix();
-  }
-  if (controls) {
-    controls.update();
-  }
-}
-
 function CrossSectionScene({
   baseGeometry,
   slicesGeometry,
   fit,
   showSlices,
-  visualStep,
 }: {
   baseGeometry: THREE.BufferGeometry;
   slicesGeometry: THREE.BufferGeometry | null;
   fit: CrossSectionSceneFit;
   showSlices: boolean;
-  visualStep: VisualStep;
 }) {
-  const { camera, size } = useThree();
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
-  const isBaseStep = visualStep === 1;
-
-  const step1Distance =
-    camera instanceof THREE.PerspectiveCamera
-      ? computeStep1TopDownDistance(
-          fit,
-          camera.fov,
-          size.width / Math.max(size.height, 1)
-        )
-      : fit.extent * 2.5;
-  const dist = isBaseStep ? step1Distance : fit.extent * 2.35;
-  const gridSize = isBaseStep ? step1GridSize(fit) : fit.extent * 3.2;
-
-  useLayoutEffect(() => {
-    applyDefaultCrossSectionView(camera, fit, controlsRef.current, visualStep);
-  }, [camera, fit, visualStep, size.width, size.height]);
+  const dist = fit.extent * 2.2;
 
   return (
     <>
@@ -189,19 +108,16 @@ function CrossSectionScene({
         )}
       </group>
       <gridHelper
-        args={[gridSize, isBaseStep ? 12 : 14, "#334155", "#1e293b"]}
+        args={[fit.extent * 3, 16, "#334155", "#1e293b"]}
         position={[0, 0, -0.002]}
         rotation={[-Math.PI / 2, 0, 0]}
       />
       <OrbitControls
-        ref={controlsRef}
         autoRotate={false}
-        enableRotate
-        enableZoom
         enablePan
         minDistance={dist * 0.35}
         maxDistance={dist * 2.5}
-        target={fit.target}
+        target={[0, 0, 0]}
       />
     </>
   );
@@ -389,7 +305,7 @@ export function CrossSectionVisualization3D({
   }, []);
 
   const fit = visualStep === 1 ? meshData.baseFit : meshData.solidFit;
-  const dist = fit.extent * 2.35;
+  const dist = fit.extent * 2.2;
   const revealProgress =
     CROSS_SECTION_SLICE_COUNT > 0
       ? revealedSlices / CROSS_SECTION_SLICE_COUNT
@@ -496,7 +412,7 @@ export function CrossSectionVisualization3D({
 
         <p className="text-xs leading-relaxed text-slate-500">
           {visualStep === 1
-            ? "底面与上方 2D 图一致，贴在 xy 平面（z = 0）；默认从 +Z 正上方俯视，无需旋转即可辨认区域形状。"
+            ? "底面与上方 2D 图一致，贴在 xy 平面（z = 0）。拖动旋转 · 滚轮缩放查看。"
             : isRevealing
               ? `自左向右依次生成 ${shapeLabel} 截面薄片，模拟 ∫ A(x) dx 中 Δx → 0 的叠加过程。`
               : `在底面之上按「${shapeLabel}」截面沿 x 方向叠放完成，立体沿 z 轴向上生长。`}
@@ -528,11 +444,10 @@ export function CrossSectionVisualization3D({
         <div className="h-[280px] w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a14]">
           <Canvas
             camera={{
-              fov: visualStep === 1 ? 32 : 40,
-              near: 0.05,
-              far: dist * 12,
+              position: [dist * 0.85, dist * 0.55, dist * 0.85],
+              fov: 45,
             }}
-            gl={{ antialias: true }}
+            gl={{ antialias: true, alpha: true }}
             dpr={[1, 2]}
           >
             <Suspense fallback={null}>
@@ -541,7 +456,6 @@ export function CrossSectionVisualization3D({
                 slicesGeometry={slicesGeometry}
                 fit={fit}
                 showSlices={visualStep === 2 && revealedSlices > 0}
-                visualStep={visualStep}
               />
             </Suspense>
           </Canvas>
