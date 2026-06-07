@@ -80,13 +80,15 @@ function CrossSectionScene({
   slicesGeometry,
   fit,
   showSlices,
+  extent,
 }: {
   baseGeometry: THREE.BufferGeometry;
   slicesGeometry: THREE.BufferGeometry | null;
   fit: CrossSectionSceneFit;
   showSlices: boolean;
+  extent: number;
 }) {
-  const dist = fit.extent * 2.2;
+  const dist = extent * 2.2;
 
   return (
     <>
@@ -108,9 +110,8 @@ function CrossSectionScene({
         )}
       </group>
       <gridHelper
-        args={[fit.extent * 3, 16, "#334155", "#1e293b"]}
-        position={[0, 0, -0.002]}
-        rotation={[-Math.PI / 2, 0, 0]}
+        args={[extent * 3, 16, "#334155", "#1e293b"]}
+        position={[0, -extent * 0.01, 0]}
       />
       <OrbitControls
         autoRotate={false}
@@ -305,7 +306,8 @@ export function CrossSectionVisualization3D({
   }, []);
 
   const fit = visualStep === 1 ? meshData.baseFit : meshData.solidFit;
-  const dist = fit.extent * 2.2;
+  const extent = fit.extent;
+  const dist = extent * 2.2;
   const revealProgress =
     CROSS_SECTION_SLICE_COUNT > 0
       ? revealedSlices / CROSS_SECTION_SLICE_COUNT
@@ -443,12 +445,9 @@ export function CrossSectionVisualization3D({
       ) : (
         <div className="h-[280px] w-full overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0a0a14]">
           <Canvas
-            camera={{
-              position: [dist * 0.85, dist * 0.55, dist * 0.85],
-              fov: 45,
-            }}
+            camera={{ position: [dist * 0.85, dist * 0.55, dist * 0.85], fov: 45 }}
+            shadows
             gl={{ antialias: true, alpha: true }}
-            dpr={[1, 2]}
           >
             <Suspense fallback={null}>
               <CrossSectionScene
@@ -456,6 +455,7 @@ export function CrossSectionVisualization3D({
                 slicesGeometry={slicesGeometry}
                 fit={fit}
                 showSlices={visualStep === 2 && revealedSlices > 0}
+                extent={extent}
               />
             </Suspense>
           </Canvas>
